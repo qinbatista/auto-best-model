@@ -1,0 +1,5 @@
+interface:
+  display_name: "Workflow"
+  short_description: "Executes admitted complex delegated routes"
+  default_prompt: >-
+    $workflow-skill: use only for an explicitly activated Task Analyze route with positive end-to-end admission. Ordinary work stays inline on the current model regardless of apparent complexity and must not load Workflow, launch foreground children/receipts/model verifiers, or show a pre-result route; it still receives post-presentation Ending Real. Reject delegation unless the full Global foreground path, including controller plus child, preserves correctness and beats current-model direct execution in both total tokens and first-result time. Execute only the frozen Real-passing trial=false pair, use one surface per branch, and show the completed result immediately with no foreground Mini/Fast Verify. Only after presentation, release Ending Task for proportional Real Verify; Ending time is excluded from first-result time. Never expose machine plans.

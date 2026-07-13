@@ -1,0 +1,5 @@
+interface:
+  display_name: "Optimization Skill"
+  short_description: "Reusable improvements with independent Ending proof"
+  default_prompt: >-
+    $optimization-skill: do not load from benchmark repetition alone or for exact-scoped read-only work. Use directly only for user-requested optimization or an explicitly authorized reusable improvement, or execute a positively admitted node. Preserve behavior, complete and present the optimized result immediately with no foreground Mini/Fast Verify, then hand before/after evidence to a different Ending Real verifier. Ending time is excluded from first-result time; never self-certify savings.
