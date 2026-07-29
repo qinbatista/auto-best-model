@@ -38,10 +38,12 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertEqual(registry["priority_producer"]["routing_role"], "bounded_task_segment_or_small_edit_priority")
         self.assertTrue(registry["policy"]["priority_producer_task_segments"])
         self.assertIn("execute", registry["priority_producer"]["task_segment_purposes"])
-        self.assertFalse(registry["policy"]["priority_producer_first_text_code"])
+        self.assertTrue(registry["policy"]["priority_producer_first_text_code"])
         self.assertTrue(registry["policy"]["priority_producer_first_small_edits"])
         self.assertTrue(registry["policy"]["priority_producer_scheduled_sources"])
         self.assertFalse(registry["policy"]["priority_producer_scheduled_sources_only"])
+        self.assertIn("answer", registry["priority_producer"]["eligible_operations"])
+        self.assertIn("work", registry["priority_producer"]["eligible_operations"])
         self.assertEqual(registry["complexity_scale"]["bands"][0], {"id": "small", "minimum": 0, "maximum": 24})
         self.assertEqual(registry["policy"]["minimum_real_passes_before_downgrade"], 2)
         self.assertNotIn("gpt-5.3-codex-spark", [model["id"] for model in registry["models"]])
@@ -112,11 +114,13 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertEqual(registry["cold_start_defaults"]["finding-bugs"], registry["cold_start_defaults"]["debug"])
         self.assertEqual(registry["cold_start_defaults"]["documentation-instructions"], registry["cold_start_defaults"]["document"])
 
-    def test_private_learning_contract_is_broad_model_switch_authority(self):
+    def test_private_learning_contract_is_dual_local_and_obsidian(self):
         registry = model_registry.build_registry(self.current_catalog(), "h" * 64)
         contract = registry["private_learning_contract"]
-        self.assertEqual(contract["authority"], "obsidian_broad_model_switch")
-        self.assertEqual(contract["path_template"], "Model Switch.md")
+        self.assertEqual(contract["authority"], "dual_local_and_obsidian")
+        self.assertEqual(contract["local_path_template"], "~/.codex/model-routing-memory/events.jsonl")
+        self.assertEqual(contract["projection_path_template"], "Model Switch.md")
+        self.assertTrue(contract["event_id_dedupe"])
         self.assertEqual(contract["specificity_order"], ["project_task", "module", "file", "symbol"])
         self.assertTrue(contract["fields_only"])
         self.assertFalse(contract["hierarchy_notes"])

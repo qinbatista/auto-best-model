@@ -236,7 +236,7 @@
     "upgrade_after_quality_failure": true,
     "operational_failures_are_neutral": true,
     "freeze_lowest_verified_pair": true,
-    "priority_producer_first_text_code": false,
+    "priority_producer_first_text_code": true,
     "priority_producer_first_small_edits": true,
     "priority_producer_task_segments": true,
     "priority_producer_scheduled_sources": true,
@@ -286,6 +286,21 @@
     "eligible_modalities": [
       "text"
     ],
+    "eligible_operations": [
+      "answer",
+      "command",
+      "edit",
+      "execute",
+      "fix",
+      "modify",
+      "rename",
+      "replace",
+      "respond",
+      "transform",
+      "update",
+      "work",
+      "write"
+    ],
     "small_edit_task_types": [
       "document",
       "prompt",
@@ -326,8 +341,10 @@
     "quality_failure": "suppress_matching_complexity_band_and_upgrade"
   },
   "private_learning_contract": {
-    "authority": "obsidian_broad_model_switch",
-    "path_template": "Model Switch.md",
+    "authority": "dual_local_and_obsidian",
+    "local_path_template": "~/.codex/model-routing-memory/events.jsonl",
+    "projection_path_template": "Model Switch.md",
+    "event_id_dedupe": true,
     "specificity_order": [
       "project_task",
       "module",

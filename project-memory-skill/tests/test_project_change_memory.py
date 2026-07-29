@@ -13,6 +13,17 @@ SPEC.loader.exec_module(MEMORY)
 
 
 class ProjectChangeMemoryTests(unittest.TestCase):
+    def test_windows_file_lock_uses_msvcrt_byte_lock(self):
+        lock_handle = mock.Mock()
+        lock_handle.tell.return_value = 0
+        windows_lock = mock.Mock()
+        windows_lock.LK_LOCK = 1
+        with mock.patch.object(MEMORY.os, "name", "nt"), mock.patch.object(MEMORY, "msvcrt", windows_lock, create=True):
+            MEMORY._acquire_file_lock(lock_handle)
+        lock_handle.write.assert_called_once_with("\0")
+        lock_handle.flush.assert_called_once_with()
+        windows_lock.locking.assert_called_once_with(lock_handle.fileno(), windows_lock.LK_LOCK, 1)
+
     def test_journal_pointer_is_idempotent_and_recent_window_stays_bounded(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             vault = Path(temporary_directory) / "vault"

@@ -19,7 +19,7 @@ Before making a savings claim, confirm that Task Analyze supplied comparable end
 - the selected pair is frozen, receipt-backed, Real-passing, and `trial=false`;
 - evidence is current, complete, and workload-comparable.
 
-If any performance item is missing, stale, cross-workload, incomplete, or negative, reject the savings claim, not a structurally valid task graph. Independent read-only sources keep their byte-cost admission and disjoint merge rules. Writable nodes must have non-overlapping ownership to run concurrently; shared files, mutable state, or output dependencies stay ordered. The generated shared ladder plus matching Obsidian broad `Model Switch.md` context still admits one ordinary producer at cold start, one-rung downgrade/upgrade trial, or frozen reuse; missing Obsidian uses the shared cold start without learning and never blocks.
+If any performance item is missing, stale, cross-workload, incomplete, or negative, reject the savings claim, not a structurally valid task graph. Independent read-only sources keep their byte-cost admission and disjoint merge rules. Writable nodes must have non-overlapping ownership to run concurrently; shared files, mutable state, or output dependencies stay ordered. The generated shared ladder plus deduplicated local/Obsidian routing history admits cold start, one-rung downgrade/upgrade trial, or frozen reuse; missing Obsidian continues from local history and never blocks.
 
 ## Authority
 
@@ -68,7 +68,7 @@ When requested work is complete:
 
 ## Result Model Disclosure
 
-Every user-facing origin result and each result/Ending node includes `Complexity: <int>/100 (<band>)`, `Current model: <model> | <effort>`, `Model evidence:`, `Model pairs (requested / resolved / effective): requested=<model>|<effort> -> resolved=<model>|<effort> -> effective=<model>|<effort>`, `Current model evidence-level:`, `Previous model: <model | effort|same as current|none>`, `Route change: upgrade|downgrade|freeze|no_switch|operational_fallback`, `Switch summary:`, and `Reason:` in 20 words or fewer. `Current model` uses the receipt-proven effective pair when available; otherwise it uses the known assigned/configured/verified-entry pair. Keep known identity concrete, never `unverified | unverified`; only absent identity uses `unknown | unknown`. One pair uses `Previous model: same as current`, `Route change: no_switch`, and `Switch summary: No model switch`.
+Use the compact Result Model Disclosure from `task-analyze-skill/references/route-contract.md` verbatim. Do not expand it into the former repeated model, evidence, previous-model, switch-summary, or reason lines.
 
 For adaptive or dispatched execution, launch the CLI as an ongoing session and read its newline-delimited `stage=result-ready` event. That event is emitted only after the public result path has been atomically written. Read and show that file immediately while the receipt/session continues; then collect the final receipt/manifest. A post-presentation receipt or protocol failure must notify and reopen instead of retracting or silently replacing the presented result.
 
@@ -88,7 +88,7 @@ On real-check failure, persist terminal FAIL evidence and emit the repair handof
 
 Use runtime receipts only for delegated model nodes, explicit routing proof, or benchmarking. A timeout remains a failure with elapsed time and partial token lower bounds.
 
-`obsidian_adaptive_model_runner.py` reads the shared contract and matching project/task/module/file/symbol/code experience but never writes learning. It embeds a sanitized learning context in the private receipt. Ending Real's terminal ledger event writes the effective producer result and initial-attempt evidence to Obsidian automatically. The broad `Model Switch.md` page is the sole current contextual experience authority. Operational failures are quality-neutral. End-to-end performance admission remains separate.
+`obsidian_adaptive_model_runner.py` reads the shared contract and merged project/task/module/file/symbol/code experience but never writes learning. It embeds a sanitized learning context in the private receipt. Ending Real writes the effective producer result, attempts, outcome reason, next/recovery pair, and score/band to the local routing ledger first, then projects the same event ID to broad `Model Switch.md`. Pending projections reconcile later. Operational failures are quality-neutral. End-to-end performance admission remains separate.
 
 Savings claims count every session once and test simple, medium, and complex separately. User-visible latency includes any required producer Quick Check and ends at completed-result presentation; detached Ending Real time is separate. A scheduled graph reports every branch and merge pair/token/time, not only its merge. A suite total never converts a losing class into a pass.
 

@@ -19,7 +19,7 @@ SPEC.loader.exec_module(module)
 def recommendation(pair="gpt-5.6-terra|medium", fallback_pair="gpt-5.6-terra|high"):
     model, effort = pair.split("|", 1)
     return {
-        "source": "obsidian_broad_model_switch",
+        "source": "local_and_obsidian_model_history",
         "memory_available": True,
         "selected_pair": pair,
         "selected_model": model,
@@ -85,7 +85,7 @@ class ObsidianAdaptiveRunnerTests(unittest.TestCase):
             with patch.object(module, "_recommend", return_value=recommendation()), patch.object(module.model_execution_receipt, "run_receipt", side_effect=fake_run):
                 result = module.run(args, "Do the work")
         self.assertEqual(result["status"], "pass")
-        self.assertEqual(result["memory_source"], "obsidian_broad_model_switch")
+        self.assertEqual(result["memory_source"], "local_and_obsidian_model_history")
         self.assertEqual(result["selected_pair"], "gpt-5.6-terra|medium")
         self.assertEqual(result["result"], "RESULT")
 
@@ -155,6 +155,15 @@ class ObsidianAdaptiveRunnerTests(unittest.TestCase):
         score = module.infer_complexity_score("Fix one typo in a single Python function.")
         self.assertLessEqual(score, 24)
         self.assertEqual(module.obsidian_model_memory.complexity_band(score), "small")
+
+    def test_simple_question_is_classified_for_spark_without_explicit_metadata(self):
+        prompt = "What is 7 times 8?"
+        with tempfile.TemporaryDirectory() as temporary:
+            args = module.resolve_fast_path_args(module.parse_args(["--workdir", temporary]), prompt)
+        self.assertEqual(args.task_type, "question")
+        self.assertEqual(args.operation, "answer")
+        self.assertLessEqual(args.complexity_score, 24)
+        self.assertEqual(args.complexity_band, "small")
 
     def test_independent_read_only_sources_enable_safe_schedule(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -418,7 +427,8 @@ source_files must list both sources."""
                 result = module.run(args, "Do the work")
         self.assertEqual(result["status"], "pass")
         self.assertFalse(result["memory_available"])
-        self.assertEqual(result["result"], "COLD START RESULT")
+        self.assertTrue(result["result"].startswith("Complexity: 12/100 (small) · Model: gpt-5.6-terra|medium · Route: no switch\nEvidence: runtime receipt"))
+        self.assertTrue(result["result"].endswith("COLD START RESULT"))
         execute.assert_called_once()
 
     def test_failed_execution_is_operational_and_not_quality_learning(self):
@@ -472,7 +482,9 @@ source_files must list both sources."""
             receipt = __import__("json").loads(args.receipt_output.read_text(encoding="utf-8"))
         self.assertEqual(calls, ["gpt-5.6-terra|medium", "gpt-5.6-terra|high"])
         self.assertEqual(result["status"], "pass")
-        self.assertEqual(result["result"], "FALLBACK RESULT")
+        self.assertTrue(result["result"].startswith("Complexity: 12/100 (small) · Model: gpt-5.6-terra|high · Route: fallback"))
+        self.assertIn("Model path: gpt-5.6-terra|medium -> gpt-5.6-terra|high", result["result"])
+        self.assertTrue(result["result"].endswith("FALLBACK RESULT"))
         self.assertEqual(receipt["operational_failure_pairs"], ["gpt-5.6-terra|medium"])
         self.assertEqual(len(receipt["route_attempts"]), 2)
 
