@@ -13,6 +13,23 @@ SPEC.loader.exec_module(MEMORY)
 
 
 class ProjectChangeMemoryTests(unittest.TestCase):
+    def test_root_first_vault_never_creates_legacy_projection_files(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            vault = Path(temporary_directory) / "vault"
+            runtime = vault / "AI Memory" / "ai_memory.py"
+            runtime.parent.mkdir(parents=True)
+            runtime.write_text("from pathlib import Path\n\ndef record_event(project, module, event_type, summary, reason, result, verification_status, **kwargs):\n    Path(__file__).with_name('called.txt').write_text(project + '|' + module, encoding='utf-8')\n    return {'status': 'written', 'event_id': 'root-event'}\n\ndef render_views():\n    Path(__file__).with_name('rendered.txt').write_text('yes', encoding='utf-8')\n", encoding="utf-8")
+            record = {"project": {"root": ".", "name": "Example"}, "module": "runtime", "summary": "Updated runtime", "reason": "Keep one memory", "result": "Passed", "verification_status": "passed", "files": ["src.py"], "verification": [], "decisions": [], "risks": [], "id": "test-id", "recorded_at": "2026-08-01T00:00:00Z", "change_kind": "edit", "scope": "code", "supersedes": ""}
+            output = MEMORY._write_obsidian(record, vault)
+            self.assertEqual(output["status"], "written")
+            self.assertEqual(output["root"], "AI Memory/events.jsonl")
+            self.assertEqual(output["event_status"], "written")
+            self.assertEqual(output["event_id"], "root-event")
+            self.assertEqual((runtime.parent / "called.txt").read_text(encoding="utf-8"), "Example|runtime")
+            self.assertEqual((runtime.parent / "rendered.txt").read_text(encoding="utf-8"), "yes")
+            self.assertFalse((vault / "Journal").exists())
+            self.assertFalse((vault / "Skills" / "Activity Index.md").exists())
+
     def test_windows_file_lock_uses_msvcrt_byte_lock(self):
         lock_handle = mock.Mock()
         lock_handle.tell.return_value = 0
@@ -180,6 +197,22 @@ class ProjectChangeMemoryTests(unittest.TestCase):
             self.assertEqual(str(descendant_target), "/tmp/vault/Skills/Global Codex Skills History.md")
             self.assertIsNone(clone_target)
 
+    def test_cache_descendants_do_not_inherit_registered_project_memory_owner(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            home = temporary / "home"
+            cache_fixture = home / ".codex" / "Cache" / "tests" / "fixture-project"
+            cache_fixture.mkdir(parents=True)
+            with mock.patch.object(MEMORY.Path, "home", lambda: home):
+                owner = MEMORY._registered_owner(cache_fixture)
+                target, title = MEMORY._canonical_history_target(
+                    {"project": {"root": str(cache_fixture)}},
+                    temporary / "vault",
+                )
+        self.assertIsNone(owner)
+        self.assertIsNone(target)
+        self.assertEqual(title, "")
+
     def test_exact_vault_root_uses_source_ingest_page_but_same_name_clone_is_unmatched(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary = Path(temporary_directory)
@@ -256,6 +289,37 @@ class ProjectChangeMemoryTests(unittest.TestCase):
             self.assertEqual(len((store / "index.jsonl").read_text(encoding="utf-8").splitlines()), 1)
             self.assertFalse((vault / "Projects" / "ExampleProject").exists())
 
+    def test_record_serialization_and_cli_result_do_not_expose_absolute_machine_paths(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            project = root / "ExampleProject"
+            store = root / "store"
+            project.mkdir()
+            (project / "src.py").write_text("value = 1\n", encoding="utf-8")
+            result = MEMORY.record_change(
+                project,
+                "portable-paths",
+                "file",
+                "edit",
+                "Recorded portable project identity",
+                "Keep local paths out of AI memory",
+                "Record uses only relative path labels",
+                "passed",
+                ["src.py"],
+                ["focused serialization check passed"],
+                store=store,
+                vault=root / "missing-vault",
+            )
+            record_path = store / result["local"]["record"]
+            serialized = record_path.read_text(encoding="utf-8")
+            rendered_result = str(result)
+
+        self.assertEqual(result["project"]["root"], ".")
+        self.assertEqual(result["local"]["store"], "store")
+        self.assertFalse(Path(result["local"]["record"]).is_absolute())
+        self.assertNotIn(str(root), serialized)
+        self.assertNotIn(str(root), rendered_result)
+
     def test_search_is_scoped_to_current_working_line(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -285,9 +349,9 @@ class ProjectChangeMemoryTests(unittest.TestCase):
                 return active_line["value"]
 
             with mock.patch.object(MEMORY, "_derive_working_line", side_effect=derive_line):
-                main_record = MEMORY.record_change(project, "runtime", "code", "edit", "Mainline runtime update", "Use current branch line", "Pass", "passed", ["src/feature.py"], ["unit check"], ["Keep branch identity"], ["none"], store=store)
+                main_record = MEMORY.record_change(project, "runtime", "code", "edit", "Mainline runtime update", "Use current branch line", "Pass", "passed", ["src/feature.py"], ["unit check"], ["Keep branch identity"], ["none"], store=store, vault=root / "missing-vault")
                 active_line["value"] = stale_line
-                MEMORY.record_change(project, "runtime", "code", "edit", "Stale branch update", "Mature on old commit", "Pass", "passed", ["src/feature.py"], ["unit check"], ["Keep branch identity"], ["none"], store=store)
+                MEMORY.record_change(project, "runtime", "code", "edit", "Stale branch update", "Mature on old commit", "Pass", "passed", ["src/feature.py"], ["unit check"], ["Keep branch identity"], ["none"], store=store, vault=root / "missing-vault")
                 active_line["value"] = main_line
                 scoped = MEMORY.search_records(project, "runtime", ["src/feature.py"], "runtime", 8, store)
                 all_records = MEMORY.search_records(project, "runtime", ["src/feature.py"], "runtime", 8, store, include_ambiguous=True)
@@ -325,11 +389,11 @@ class ProjectChangeMemoryTests(unittest.TestCase):
 
             with mock.patch.object(MEMORY, "_derive_working_line", side_effect=derive_line):
                 active_line["value"] = stale_line
-                failed = MEMORY.record_change(project, "runtime", "file", "edit", "Mainline failure", "Needs repair", "Still failing", "failed", ["src/config.py"], ["baseline"], ["Must retain line"], ["none"], store=store)
+                failed = MEMORY.record_change(project, "runtime", "file", "edit", "Mainline failure", "Needs repair", "Still failing", "failed", ["src/config.py"], ["baseline"], ["Must retain line"], ["none"], store=store, vault=root / "missing-vault")
                 active_line["value"] = main_line
-                MEMORY.record_change(project, "runtime", "file", "edit", "Stale branch change", "Different branch", "Passed", "passed", ["src/config.py"], ["baseline"], ["Keep branch identity"], ["none"], store=store)
+                MEMORY.record_change(project, "runtime", "file", "edit", "Stale branch change", "Different branch", "Passed", "passed", ["src/config.py"], ["baseline"], ["Keep branch identity"], ["none"], store=store, vault=root / "missing-vault")
                 with self.assertRaisesRegex(ValueError, "same project working line"):
-                    MEMORY.record_change(project, "runtime", "file", "edit", "Repair attempt", "Corrects failure", "Passed", "passed", ["src/config.py"], ["baseline"], ["Repair needs same line"], ["none"], supersedes=failed["record_id"], store=store)
+                    MEMORY.record_change(project, "runtime", "file", "edit", "Repair attempt", "Corrects failure", "Passed", "passed", ["src/config.py"], ["baseline"], ["Repair needs same line"], ["none"], supersedes=failed["record_id"], store=store, vault=root / "missing-vault")
 
     def test_rejects_files_outside_project(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

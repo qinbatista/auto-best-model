@@ -1,6 +1,6 @@
 ---
 name: project-memory-skill
-description: "Always use in the result-producing node for durable project-file changes. The Sol-ultra adaptive entry parent does not load memory before dispatch; the selected producer recalls prior project/module/file decisions before editing and records the completed change after Ending. Do not use for read-only work or disposable cache/work artifacts."
+description: "Always use in the result-producing node for durable project-file changes. The Sol-ultra adaptive entry parent does not load memory before dispatch; the selected producer recalls prior project/module/file decisions before editing and records the completed change after Ending. Do not use for read-only work or disposable Cache artifacts."
 ---
 
 # Project Memory Skill
@@ -13,14 +13,30 @@ Maintain a durable, file-level explanation of project changes so future AI work 
 
 Load this skill in the selected result-producing node whenever a task creates, edits, renames, moves, or deletes a durable project file, including source code, configuration, schemas, reusable prompts, tests, documentation, skill instructions, and source-controlled asset metadata. The Sol-ultra adaptive entry parent dispatches before memory recall and never loads this skill merely to route.
 
-Do not load it for read-only tasks, external actions with no durable project-file change, or disposable `work/`, `cache/`, build, render, receipt, and temporary artifacts unless the user explicitly accepts those files as project deliverables.
+Do not load it for read-only tasks, external actions with no durable project-file change, or disposable `Cache/`, build, render, receipt, and temporary artifacts unless the user explicitly accepts those files as project deliverables.
 
 This skill supplements the file type's owning skill. It does not replace `code-skill`, `prompt-skill`, document skills, repository instructions, or user authority.
+
+## Project Cache Artifact Policy
+
+Before the first Codex-selected project-support write, resolve the authoritative `<project-root>`, inspect `<project-root>/Cache/`, and choose the destination there. All agent-created disposable or supporting artifacts — test scripts/results/fixtures, debug logs/data, intermediate code, image inspection downloads/renders, generated images, receipts, snapshots, comparisons, and probes — must live only under `<project-root>/Cache/`; redirect any proposed path there before writing. Requested durable project source changes and final deliverables remain in the project's declared source/output paths.
+
+Reuse an existing Cache category and naming scheme; otherwise create `Cache/tests/<task>`, `Cache/debug/<task>`, or `Cache/images/<task>` according to the content. Never deliberately use `~/.codex/cache`, `~/.codex/tmp`, another global cache, a system temporary directory, or an ad hoc project-root `tmp/`, `tests/`, or `work/` for project artifacts. This governs agent-selected destinations, not OS/tool-managed internal temporary files outside agent control.
+
+This applies to every local-machine path, not only Cache paths. Any path written into a Skill, script, source file, configuration, documentation, or command must be project-root-relative or resolved at runtime from a discovered project root. Never hard-code a user-specific POSIX home absolute path or Windows drive-letter absolute path. Command examples state that they run from the project root; code accepts or derives that root and joins relative paths with native path APIs.
+
+Unavoidable machine-specific absolute paths needed only for AI access to project-external resources may exist only in project-root `Cache/cache_path.json`. The registry schema is `{"schema_version": 1, "scope": "ai_only", "paths": {...}}`; every stable key contains `path`, `kind` (`file|directory|application`), and a short `purpose`. It is untracked AI-only local state: project source, runtime, tests, build, CI, package scripts, and shipped configuration must never read, import, or depend on it. Never commit, mirror, or publish it, ensure it is explicitly ignored when `Cache/` is not already ignored, and never store credentials, tokens, secrets, or project business data there.
+
+Look up the registry first and validate the schema, absolute path, declared kind, existence, and readability before use. If an entry is missing or stale, perform one bounded platform-aware discovery, update only that key through a sibling file inside `Cache/`, replace the registry atomically, and preserve unrelated keys. For Obsidian, try verified registry keys first, then `CODEX_OBSIDIAN_VAULT`, then the configured open vault in `obsidian.json`, then one exact bounded search; cache each successful external path. Never copy registered absolute values into Skills, source, documentation, commands, logs, receipts, or memory.
+
+Project `AGENTS.md` is a compact structural contract, not a project notebook. Keep only stable project structure, ownership boundaries, critical entry points, hard constraints, project-wide conventions, a compact definition of done, and short pointers to canonical build/verification documentation. Do not write implementation details, task history, logs, receipts, test results, evidence, generated data, temporary notes, dependency walkthroughs, long command blocks, or troubleshooting prose there. Store those details in the owning source, project documentation, or a README inside the relevant Cache area.
+
+When Cache content is reusable, retained, workflow-required, or project-influencing, add one concise registry entry to project-root `AGENTS.md`: the exact Cache-relative path, one-line structural role, owner/source of truth, and retention/version-control status. Link to the owning source or detailed README instead of embedding its commands, dependencies, runbook, or regeneration procedure. Update `AGENTS.md` only when project structure, ownership, a critical entry point, or a hard constraint changes. Important Cache without this concise pointer is incomplete; one-off disposable outputs need no entry. Never delete documented important Cache content without explicit authorization; other cleanup may delete only the current task's named Cache folder or explicitly identified disposable files.
 
 ## Project Change-Memory Authority And Storage
 
 - For project change memory, the private local JSONL ledger at `~/.codex/project-change-memory/` is authoritative.
-- When `CODEX_OBSIDIAN_VAULT` points to an available vault, or the default `MyAILLM` vault exists, write one complete human-readable entry under exactly one stable `History.md` heading and one pointer-only `Activity Index.md` line; never create ChangeMemory folders, record pages, module pages, file pages, date logs, category pages, or relation notes.
+- When the resolved vault contains `AI Memory/ai_memory.py`, that root-first schema is authoritative: project through its single event store and generated root views, and never create legacy History, Activity, Journal, or Archive layers. Only a vault without that runtime may use the older one-history plus pointer-only projection.
 - Missing or unavailable Obsidian is a successful no-op. Local recording must still complete.
 - Store project-relative file paths, not raw prompts, private reasoning, credentials, tokens, cookies, or unrelated task content.
 - Resolve registered projects from home-relative owner paths. When a project has an explicitly registered old and current root, recall and supersession treat both as one owner without rewriting prior JSONL records; an unregistered same-name clone remains isolated.
@@ -145,4 +161,4 @@ If a project has sufficient git working-line metadata, retrieval excludes ambigu
 
 ## Verification
 
-After recording, require the command's JSON response to report `status=written` or `status=duplicate`, `local.written=true`, and the expected project-relative files. When Obsidian is available, also require `obsidian.status=written`; otherwise require `obsidian.status=unavailable`. A recorder failure reopens the task because the global change-memory contract was not satisfied.
+After recording, require the command's JSON response to report `status=written` or `status=duplicate`, `local.written=true`, and the expected project-relative files. When Obsidian is available, also require `obsidian.status=written`; for a root-first vault require `obsidian.root=AI Memory/events.jsonl`. Otherwise require `obsidian.status=unavailable`. A recorder failure reopens the task because the global change-memory contract was not satisfied.

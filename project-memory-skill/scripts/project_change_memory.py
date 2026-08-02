@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 if os.name == "nt":
@@ -55,7 +56,12 @@ def _project_identity(project_root):
         raise ValueError("project_root must be an existing directory")
     name = root.name or "project"
     path_hash = hashlib.sha256(str(root).encode()).hexdigest()[:10]
-    return {"name": name, "root": str(root), "key": f"{_slug(name, 'project')}-{path_hash}"}
+    return {
+        "name": name,
+        "root": ".",
+        "key": f"{_slug(name, 'project')}-{path_hash}",
+        "owner": _registered_owner(root) or "",
+    }
 
 
 def _normalize_files(project_root, file_values):
@@ -295,6 +301,8 @@ def _registered_owner_alias(record_root):
 def _registered_owner(record_root):
     root = _registered_owner_alias(record_root)
     for registered_root, owner in _registered_project_owners():
+        if root == registered_root + "/cache" or root.startswith(registered_root + "/cache/"):
+            continue
         if root == registered_root or root.startswith(registered_root + "/"):
             return owner
     return None
@@ -323,10 +331,12 @@ def _record_matches_project(record, project):
     record_key = record_project.get("key") or record.get("project_key")
     if project_key and record_key == project_key:
         return True
-    owner = _registered_owner(project.get("root", ""))
+    owner = project.get("owner") or _registered_owner(project.get("root", ""))
     if not owner:
         return False
     if record.get("project_owner") == owner:
+        return True
+    if record_project.get("owner") == owner:
         return True
     record_root = record_project.get("root")
     if record_root and _registered_owner(record_root) == owner:
@@ -343,12 +353,12 @@ def _active_knowledge_root(vault_path):
     return legacy_root
 
 
-def _canonical_history_target(record, vault_path):
+def _canonical_history_target(record, vault_path, project_root=None):
     """Return the only broad History page permitted for an Obsidian projection."""
-    project_root = Path(record["project"]["root"]).expanduser().resolve()
-    if project_root == vault_path.resolve():
+    resolved_project_root = Path(project_root).expanduser().resolve() if project_root is not None else Path(record["project"]["root"]).expanduser().resolve()
+    if resolved_project_root == vault_path.resolve():
         return _active_knowledge_root(vault_path) / "Source Ingest and Wiki Maintenance.md", "Source Ingest and Wiki Maintenance"
-    owner = _registered_owner(record["project"]["root"])
+    owner = record.get("project", {}).get("owner") or _registered_owner(resolved_project_root)
     if owner == "Global Codex Skills":
         return vault_path / "Skills" / "Global Codex Skills History.md", "Global Codex Skills"
     if owner is None:
@@ -438,12 +448,35 @@ def _write_journal_pointer(history_target, vault_path, record):
         index.write_text(updated_index, encoding="utf-8")
 
 
-def _write_obsidian(record, vault):
+def _write_root_first_memory(record, vault_path):
+    runtime_path = vault_path / "AI Memory" / "ai_memory.py"
+    specification = importlib.util.spec_from_file_location("myaillm_ai_memory_runtime", runtime_path)
+    if specification is None or specification.loader is None:
+        raise RuntimeError(f"Cannot load root-first AI memory runtime: {runtime_path}")
+    runtime = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(runtime)
+    text = " ".join([record.get("summary", ""), record.get("reason", ""), record.get("result", ""), record.get("verification_status", "")]).lower()
+    if record.get("verification_status") in {"failed", "partial"} or any(word in text for word in ("bug", "fix", "repair", "failure", "error", "regression")):
+        event_type = "bug-fix"
+    elif any(word in text for word in ("architecture", "schema", "ownership", "contract", "structure")):
+        event_type = "architecture"
+    else:
+        event_type = "general"
+    project = record.get("project", {}).get("owner") or record.get("project", {}).get("name") or "Unknown"
+    working_line = json.dumps(record.get("project", {}).get("working_line") or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    output = runtime.record_event(project, record["module"], event_type, record["summary"], record["reason"], record["result"], record["verification_status"], working_line=working_line, files=record["files"], verification=record["verification"], decisions=record["decisions"], risks=record["risks"])
+    runtime.render_views()
+    return {"status": "written", "written": True, "root": "AI Memory/events.jsonl", "event_status": output.get("status"), "event_id": output.get("event_id", "")}
+
+
+def _write_obsidian(record, vault, project_root=None):
     vault_path = _resolve_vault(vault)
     if vault_path is None:
         return {"status": "unavailable", "written": False}
+    if (vault_path / "AI Memory" / "ai_memory.py").is_file():
+        return _write_root_first_memory(record, vault_path)
     entry = _markdown_entry(record)
-    target, title = _canonical_history_target(record, vault_path)
+    target, title = _canonical_history_target(record, vault_path, project_root)
     if target is None:
         return {"status": "no-op", "written": False, "reason": "unregistered_project_root"}
     section = _history_section(record)
@@ -470,10 +503,11 @@ def _fingerprint(record):
 
 
 def record_change(project_root, module, scope, change_kind, summary, reason, result, verification_status, files, verification=None, decisions=None, risks=None, supersedes="", store=DEFAULT_STORE, vault=None, recorded_at=None):
+    resolved_project_root = Path(project_root).expanduser().resolve()
     project = _project_identity(project_root)
     timestamp = recorded_at or datetime.now(timezone.utc)
     working_line = _derive_working_line(project_root)
-    record = {"schema_version": SCHEMA_VERSION, "id": "", "recorded_at": timestamp.isoformat(timespec="seconds").replace("+00:00", "Z"), "project": project, "module": _single_line(module, "module", max_length=160), "scope": scope, "change_kind": change_kind, "summary": _single_line(summary, "summary"), "reason": _single_line(reason, "reason"), "result": _single_line(result, "result"), "verification_status": verification_status, "verification": [_single_line(value, "verification", max_length=600) for value in (verification or [])], "decisions": [_single_line(value, "decision", max_length=600) for value in (decisions or [])], "risks": [_single_line(value, "risk", max_length=600) for value in (risks or [])], "files": _normalize_files(project["root"], files), "supersedes": _single_line(supersedes, "supersedes", required=False, max_length=120)}
+    record = {"schema_version": SCHEMA_VERSION, "id": "", "recorded_at": timestamp.isoformat(timespec="seconds").replace("+00:00", "Z"), "project": project, "module": _single_line(module, "module", max_length=160), "scope": scope, "change_kind": change_kind, "summary": _single_line(summary, "summary"), "reason": _single_line(reason, "reason"), "result": _single_line(result, "result"), "verification_status": verification_status, "verification": [_single_line(value, "verification", max_length=600) for value in (verification or [])], "decisions": [_single_line(value, "decision", max_length=600) for value in (decisions or [])], "risks": [_single_line(value, "risk", max_length=600) for value in (risks or [])], "files": _normalize_files(resolved_project_root, files), "supersedes": _single_line(supersedes, "supersedes", required=False, max_length=120)}
     record["project"]["working_line"] = working_line
     if scope not in SCOPE_VALUES:
         raise ValueError(f"scope must be one of {', '.join(SCOPE_VALUES)}")
@@ -505,7 +539,7 @@ def record_change(project_root, module, scope, change_kind, summary, reason, res
                 raise ValueError("supersedes must overlap at least one touched file")
         duplicate = next((existing for existing in reversed(existing_records) if existing.get("fingerprint") == record["fingerprint"]), None)
         if duplicate:
-            return {"status": "duplicate", "record_id": duplicate["id"], "project": duplicate["project"], "files": duplicate["files"], "local": {"written": True, "store": str(store_path)}, "obsidian": {"status": "not-rewritten", "written": False}}
+            return {"status": "duplicate", "record_id": duplicate["id"], "project": duplicate["project"], "files": duplicate["files"], "local": {"written": True, "store": store_path.name}, "obsidian": {"status": "not-rewritten", "written": False}}
         project_dir = store_path / "projects" / project["key"]
         record_path = project_dir / "records" / timestamp.strftime("%Y") / timestamp.strftime("%m") / f"{record['id']}.json"
         record_path.parent.mkdir(parents=True, exist_ok=True)
@@ -516,8 +550,8 @@ def record_change(project_root, module, scope, change_kind, summary, reason, res
         _append_jsonl(project_dir / "modules" / _slug(record["module"], "module") / "index.jsonl", record)
         for relative_file in record["files"]:
             _append_jsonl(_project_file_index_path(project_dir, relative_file), record)
-        obsidian_status = _write_obsidian(record, vault)
-    return {"status": "written", "record_id": record["id"], "project": project, "files": record["files"], "local": {"written": True, "store": str(store_path), "record": str(record_path)}, "obsidian": obsidian_status}
+        obsidian_status = _write_obsidian(record, vault, resolved_project_root)
+    return {"status": "written", "record_id": record["id"], "project": project, "files": record["files"], "local": {"written": True, "store": store_path.name, "record": record_path.relative_to(store_path).as_posix()}, "obsidian": obsidian_status}
 
 
 def search_records(project_root=None, module="", files=None, query="", max_results=8, store=DEFAULT_STORE, include_ambiguous=False):
@@ -548,7 +582,7 @@ def memory_status(store=DEFAULT_STORE, vault=None):
     store_path = Path(store).expanduser().resolve()
     records = _read_records(store_path / "index.jsonl")
     vault_path = _resolve_vault(vault)
-    return {"status": "ready", "local": {"store": str(store_path), "records": len(records)}, "obsidian": {"status": "available" if vault_path else "unavailable", "vault": str(vault_path) if vault_path else ""}}
+    return {"status": "ready", "local": {"store": store_path.name, "records": len(records)}, "obsidian": {"status": "available" if vault_path else "unavailable", "vault": vault_path.name if vault_path else ""}}
 
 
 def main():
